@@ -4,12 +4,158 @@ using System.IO;
 using System.Text.RegularExpressions;
 using SteamKit2;
 using System.ComponentModel;
+using System.Net;
+using System.IO.Compression;
+using Ionic.Zip;
 
 namespace DepotDownloader
 {
     class Program
     {
-        static void Main( string[] args )
+        static void Main()
+        {
+            Console.Title = "TF2014 Installer";
+
+            Console.Out.WriteLine("Unfortunately, since TF2 has a Free To Play liscense, you will need to log into a Steam account to download the game");
+            Console.Out.WriteLine("Also, as an attempt to keep you logged into Steam and because of certain security precautions, you will need to enter your Steam Guard code each time (3) the script accesses Steam servers");
+            Console.Out.Write("Username: ");
+            string username = Console.In.ReadLine();
+            Console.Out.Write("Passoword: ");
+            string password = ReadPassword();
+
+            string[] download440 = new string[8] { "-username", username, "-password", password, "-app", "440", "-depot", "440" };
+
+            string[] download232251 = new string[10] { "-username", username, "-password", password, "-app", "440", "-depot", "232251", "-manifest", "2879089989606018346" };
+
+            string[] download441 = new string[10] { "-username", username, "-password", password, "-app", "440", "-depot", "441", "-manifest", "7174057601743547991" };
+
+            Download(download440);
+            Download(download232251);
+            Download(download441);
+            //After this, should have downloaded all the actual game files, now its time to move them into one folder
+
+
+            string exeLocation = Directory.GetCurrentDirectory();
+            string depotsFolder = exeLocation + "\\depots";
+            string[] folder441 = Directory.GetDirectories(depotsFolder + "\\441");
+
+            DirectoryInfo data441 = new DirectoryInfo(folder441[0]);
+
+            string[] folder440 = Directory.GetDirectories(depotsFolder + "\\440");
+
+            DirectoryInfo data440 = new DirectoryInfo(folder440[0]);
+
+            Console.Out.WriteLine(folder440[0]);
+
+            string[] folder232251 = Directory.GetDirectories(depotsFolder + "\\232251");
+
+            DirectoryInfo data232251 = new DirectoryInfo(folder232251[0]);
+
+            Console.Out.WriteLine("Copying General TF2 files...");
+            CopyFilesRecursively(data440, data441);
+            Console.Out.WriteLine("Done!");
+            /*Console.Out.WriteLine("Cleaning up...");
+            Directory.Delete(data441.FullName, true);*/
+
+
+            Console.Out.WriteLine("Copying Windows-specific Data...");
+            CopyFilesRecursively(data232251, data441);
+            Console.Out.WriteLine("Done!");
+            /*Console.Out.WriteLine("Cleaning up...");
+            Directory.Delete(data232251.FullName, true);*/
+
+            //Should have done the core parts of downloading off of Steam servers, now it's time to use shady russian hacks!
+
+
+            using (var client = new WebClient())
+            {
+                Console.Out.WriteLine("Downloading revemu...");
+                client.DownloadFile("https://www.dropbox.com/s/md2nsxfz9xqw8y7/tf2.zip?dl=1", depotsFolder + "\\tf2.zip");
+                Console.Out.WriteLine("Done!");
+            }
+
+            using (ZipFile zip1 = ZipFile.Read(depotsFolder + "\\tf2.zip"))
+            {
+                Console.Out.WriteLine("Extracting revemu...");
+                // here, we extract every entry, but we could extract conditionally
+                // based on entry name, size, date, checkbox status, etc.  
+                foreach (ZipEntry e in zip1)
+                {
+                    e.Extract(depotsFolder + "\\tf2revemu", ExtractExistingFileAction.OverwriteSilently);
+                }
+            }
+            Console.Out.WriteLine("Done!");
+
+            DirectoryInfo revemu = new DirectoryInfo(depotsFolder + "\\tf2revemu");
+
+            Console.Out.WriteLine("Copying revemu to the tf2 folder...");
+            CopyFilesRecursively(revemu, data441);
+            Console.Out.WriteLine("Done!");
+            /*Console.Out.WriteLine("Cleaning up...");
+            Directory.Delete(revemu.FullName, true);
+            Console.Out.WriteLine("Done!");*/
+
+            string[] arrLine = File.ReadAllLines(data441.FullName + "\\rev.ini");
+
+            string name;
+
+            Console.Out.Write("\nPlease enter your desired in-game name: ");
+            name = Console.In.ReadLine();
+
+            arrLine[120] = "PlayerName=" + name + "\n";
+            arrLine[92] = "SteamUser=" + name + "\n";
+
+            File.WriteAllLines(data441.FullName + "\\rev.ini", arrLine);
+
+            Console.Out.WriteLine("\nFinished installing and setting everything up - run revLoader.exe not hl2.exe, with admin rights if it doesn't work, also I can't stress how important this is:\n TURN OFF STEAM BEFORE RUNNING REVLOADER BECAUSE YOUR ACTUAL PROFILE INFO WILL BE USED AND YOU MIGHT RISK GETTING VAC'd, B&'d, V&'d OR ANY OTHER COSMIC ARRAY OF THINGS THAT MAY BEFALL YOUR STEAM ACCOUNT, PC, FILES, FAMILY, FRIENDS OR CAT");
+            Console.Out.WriteLine("Press any key to continue and exit...");
+            Console.In.Read();
+        }
+
+
+        static void CopyFilesRecursively(DirectoryInfo source, DirectoryInfo target)
+        {
+            foreach (DirectoryInfo dir in source.GetDirectories())
+                CopyFilesRecursively(dir, target.CreateSubdirectory(dir.Name));
+            foreach (FileInfo file in source.GetFiles())
+                file.CopyTo(Path.Combine(target.FullName, file.Name), true);
+        }
+
+        static string ReadPassword()
+        {
+            string password = "";
+            ConsoleKeyInfo info = Console.ReadKey(true);
+            while (info.Key != ConsoleKey.Enter)
+            {
+                if (info.Key != ConsoleKey.Backspace)
+                {
+                    Console.Write("*");
+                    password += info.KeyChar;
+                }
+                else if (info.Key == ConsoleKey.Backspace)
+                {
+                    if (!string.IsNullOrEmpty(password))
+                    {
+                        // remove one character from the list of password characters
+                        password = password.Substring(0, password.Length - 1);
+                        // get the location of the cursor
+                        int pos = Console.CursorLeft;
+                        // move the cursor to the left by one character
+                        Console.SetCursorPosition(pos - 1, Console.CursorTop);
+                        // replace it with space
+                        Console.Write(" ");
+                        // move the cursor to the left by one character again
+                        Console.SetCursorPosition(pos - 1, Console.CursorTop);
+                    }
+                }
+                info = Console.ReadKey(true);
+            }
+            // add a new line because user pressed enter at the end of their password
+            Console.WriteLine();
+            return password;
+        }
+
+        static void Download( string[] args )
         {
             if ( args.Length == 0 )
             {
